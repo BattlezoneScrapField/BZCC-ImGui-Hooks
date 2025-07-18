@@ -15,13 +15,15 @@
 class DiscordManager
 {
 public:
-	DiscordManager(const char* appID);
+	DiscordManager(const char* appID, const char* mode, const char* map);
 	~DiscordManager();
 
 	void Update();
 
 private:
 	const char* appID;
+	const char* gameMode;
+	const char* gameMap;
 	bool sendPresence;
 	int64_t startTime;
 

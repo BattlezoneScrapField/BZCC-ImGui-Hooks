@@ -5,10 +5,13 @@
 #include <chrono>
 #include <format>
 
-DiscordManager::DiscordManager(const char* appID)
+DiscordManager::DiscordManager(const char* appID, const char* mode, const char* map)
 	: appID(appID), sendPresence(true), startTime(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 {
 	DiscordEventHandlers handlers{};
+
+	gameMode = mode;
+	gameMap = map;
 
 	handlers.ready = HandleReady;
 	handlers.disconnected = HandleDisconnected;
@@ -29,25 +32,13 @@ void DiscordManager::Update()
 {
 	if (sendPresence)
 	{
-		DiscordRichPresence discordPresence{};
-
-		std::string details = std::format("Frustration level {}", 10); // probably make this a member variable or something -VT
-
-		discordPresence.state = "bzcc something";
-		discordPresence.details = details.c_str();
+		DiscordRichPresence discordPresence;
+		memset(&discordPresence, 0, sizeof(discordPresence));
+		discordPresence.state = gameMap;
+		discordPresence.details = gameMode;
 		discordPresence.startTimestamp = startTime;
-		discordPresence.endTimestamp = 0; // not sure what the correct value is play around with it -VT
-		discordPresence.largeImageKey = "your image";
-		discordPresence.smallImageKey = "feuker";
-		discordPresence.partyId = "Vets";
 		discordPresence.partySize = 1;
-		discordPresence.partyMax = 6;
-		discordPresence.partyPrivacy = DISCORD_PARTY_PUBLIC;
-		discordPresence.matchSecret = "abcxyz";
-		discordPresence.joinSecret = "join";
-		discordPresence.spectateSecret = "look";
-		discordPresence.instance = 0;
-
+		discordPresence.partyMax = 4;
 		Discord_UpdatePresence(&discordPresence);
 	}
 	else

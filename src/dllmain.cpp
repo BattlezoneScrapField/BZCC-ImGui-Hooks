@@ -11,25 +11,6 @@
 #include <format>
 #include <memory>
 
-// It can be useful to know where exactly the file is from C++, depending on the structure of your mod you can use this
-// to relative path to things like config files or anything else you need to access
-const std::filesystem::path dllPath = []()
-    {
-        char path[MAX_PATH];
-        GetModuleFileName(GetModuleHandle("library.dll"), path, MAX_PATH); // just make sure this matches the name of your final .dll file
-        return std::filesystem::path(path);
-    }();
-
-// Mydocs is also a nice folder to have
-const std::filesystem::path myDocs = []()
-    {
-        size_t bufSize = 0;
-        GetOutputPath(bufSize, nullptr);
-        std::unique_ptr<wchar_t[]> path = std::make_unique<wchar_t[]>(bufSize);
-        GetOutputPath(bufSize, path.get());
-        return std::filesystem::path(path.get());
-    }();
-
 // Define a Lua C function that will be exported, use the Lua 5.2 reference manual to learn about the api
 int Hello(lua_State* L)
 {
@@ -69,70 +50,6 @@ bool LuaCheckStatus(lua_State* L, int statusCode, const char* message)
     return false;
 }
 
-// This function simulates implementing a callback from C++ into lua
-int SimulateCallback(lua_State* L)
-{
-    const int specialValue = 5;
-
-    // You should have the callback defined IN your module table, not globally like how the game does it.
-    lua_getglobal(L, "package");
-    lua_getfield(L, -1, "loaded");
-    lua_getfield(L, -1, "library"); // name of your module, in this case "library"
-    lua_getfield(L, -1, "MyCallback"); // name of your script-defined callback function
-    
-    // Check to see if the callback has been defined, if not then don't process it
-    if (!lua_isfunction(L, -1))
-    {
-        return 0;
-    }
-
-    lua_pushinteger(L, specialValue); // Push any parameters
-    int status = lua_pcall(L, 1, 1, 0); // Read the reference manual for the details on pcall
-
-    // Check the result to make sure the call went through successfully, like the game does
-    // You can specifiy the type of error, like how the game might say
-    // "Lua script Update Error: [the actual error from lua]
-    LuaCheckStatus(L, status, "Runtime Error: {}");
-
-    // Once we're free of errors...
-    int result = luaL_checkinteger(L, -1); // You can also get the return value from lua, so users can return values to change the behavior
-    
-    if (result == 1)
-    {
-        // Do stuff
-    }
-
-    return 0;
-}
-
-// Don't do anything stupid like call back from another thread, a method that works well is to
-// use callbacks in code injections like this
-
-/*
-int __cdecl MyCallback(int param)
-{
-    // Do stuff...
-    return 1;
-}
-
-// As part of a larger function...
-__asm
-{
-    push ecx // say an interesting value is in ecx
-    call MyCallback // use an explicit calling convention like cdecl and follow it
-    add esp, 0x04 // one int parameter is 4 bytes
-    mov [retVal], eax // return is in eax, store it in a variable
-
-    // or alternatively you could use the return value in the assembly
-    // if you want to branch based off it or do something else
-    cmp eax, 0
-    je somewhere
-
-    // remember to clean up the stack if you allocated space
-    // and restore registers
-}
-*/
-
 namespace Lua
 {
     static std::unique_ptr<DiscordManager> rpc; // just to make sure it's only initialized once and inside of Start() we can use a smart pointer,
@@ -141,7 +58,9 @@ namespace Lua
     static int Start(lua_State* L)
     {
         const char* appID = luaL_checkstring(L, 1); // not sure what the appID will be but we get it from lua
-        rpc = std::make_unique<DiscordManager>(appID);
+        const char* mode = luaL_checkstring(L, 2);
+        const char* map = luaL_checkstring(L, 3);
+        rpc = std::make_unique<DiscordManager>(appID, mode, map);
         return 0;
     }
 
@@ -151,7 +70,6 @@ namespace Lua
         return 0;
     }
 }
-
 
 // Define the export table for the lua library, in order for lua to properly load it,
 // you must name this function luaopen_[name_of_your_library] and this must match the name of
@@ -165,7 +83,6 @@ extern "C" int __declspec(dllexport) luaopen_library(lua_State* L)
         { "Update", Lua::Update },
         { "Hello", Hello },
         { "Add", Add },
-        { "SimulateCallback", SimulateCallback },
         { 0, 0 } // the last entry of the export table should be two zeros
     };
     lua_newtable(L);
