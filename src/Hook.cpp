@@ -1,12 +1,24 @@
 #include "Hook.h"
 #include "Drawing.h"
+#include <detours.h>
+#include <Windows.h>
+#include "ImGui/imgui_impl_dx11.h"
+#include <D3D11.h>
+#include <D3Dcommon.h>
+#include <DXGI.h>
+#include <DXGIFormat.h>
+#include <DXGIType.h>
+#include "ImGui/imgui.h"
+#include "ImGui/imgui_impl_win32.h"
 
 IDXGISwapChain* Hook::pSwapChain = nullptr; // D3D11 Swap Chain
 ID3D11Device* Hook::pDevice = nullptr; // D3D11 device.
 ID3D11DeviceContext* Hook::pDeviceContext = nullptr; // D3D11 device context.
+
 tPresent Hook::oPresent = nullptr; // Pointer of the original Present function
 tResizeBuffers Hook::oResizeBuffers = nullptr; // Pointer of the original ResizeBuffer function
 tSetFullscreenState Hook::oSetFullscreenState = nullptr;
+
 HWND Hook::window = nullptr; // Window of the current process
 HMODULE Hook::hDDLModule = nullptr; // HMODULE of the DLL
 
@@ -25,11 +37,14 @@ void Hook::HookDirectX()
 		oPresent = (tPresent)d3d11SwapChain[8];
 		oResizeBuffers = (tResizeBuffers)d3d11SwapChain[13];
 		oSetFullscreenState = (tSetFullscreenState)d3d11SwapChain[10];
+
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
+
 		DetourAttach(&(PVOID&)oPresent, Drawing::hkPresent);
 		DetourAttach(&(PVOID&)oResizeBuffers, hkResizeBuffers);
 		DetourAttach(&(PVOID&)oSetFullscreenState, hkSetFullscreenState);
+
 		DetourTransactionCommit();
 	}
 }
@@ -53,9 +68,11 @@ void Hook::UnHookDirectX()
 
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
+
 	DetourDetach(&(PVOID&)oPresent, Drawing::hkPresent);
 	DetourDetach(&(PVOID&)oResizeBuffers, hkResizeBuffers);
 	DetourDetach(&(PVOID&)oSetFullscreenState, hkSetFullscreenState);
+
 	DetourTransactionCommit();
 }
 

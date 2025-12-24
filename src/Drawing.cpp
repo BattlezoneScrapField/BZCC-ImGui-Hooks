@@ -1,5 +1,6 @@
 #include "Drawing.h"
 #include "Hook.h"
+#include "ScriptUtils.h"
 
 BOOL Drawing::bInit = FALSE; // Status of the initialization of ImGui.
 bool Drawing::bDisplay = true; // Status of the menu display.
@@ -52,7 +53,12 @@ HRESULT Drawing::hkPresent(IDXGISwapChain* pThis, UINT SyncInterval, UINT Flag)
 				vWindowSize = { ImGui::GetWindowSize().x, ImGui::GetWindowSize().y };
 			}
 
-			ImGui::Text("Draw your menu here.");
+			if (ImGui::Button("Scavenger")) 
+			{
+				Vector pos = GetPosition(GetPlayerHandle(0));
+				Handle scav = BuildObject("ivscav", 1, GetPositionNear(pos, 20, 30));
+				SetBestGroup(scav);
+			}
 		}
 		ImGui::End();
 	}
