@@ -94,7 +94,8 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hModule);
         Hook::hDDLModule = hModule;
-        CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)Hook::HookDirectX, nullptr, 0, nullptr);
+        if (auto h = CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)Hook::HookDirectX, nullptr, 0, nullptr))
+            CloseHandle(h);
         break;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:

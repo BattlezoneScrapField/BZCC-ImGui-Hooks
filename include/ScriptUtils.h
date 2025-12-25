@@ -219,6 +219,47 @@ enum TEAMRELATIONSHIP
 	TEAMRELATIONSHIP_ENEMYTEAM, // Team # isn't identical, and teams are enemies
 };
 
+// Damage Type used by the DAMAGE struct below.
+typedef unsigned char byte;
+enum DAMAGE_TYPE : byte
+{
+	DAMAGE_TYPE_UNKNOWN,
+	DAMAGE_TYPE_ORDNANCE,
+	DAMAGE_TYPE_EXPLOSION,
+	DAMAGE_TYPE_COLLISION,
+	DAMAGE_TYPE_WATER,
+	DAMAGE_TYPE_UNDERWATER,
+	DAMAGE_TYPE_SCRIPT,
+	DAMAGE_TYPE_LAST // must be last
+};
+
+// damage structure
+struct DAMAGE
+{
+	int owner;		// handle of damage owner
+	int source;		// handle of damaging object
+	float base;		// base damage done
+	float armor;	// armor scale factor
+	float shield;	// shield scale factor
+	float value;	// damage value to apply
+	DAMAGE_TYPE damageType;
+	bool m_SelfDamage;
+	bool m_FriendlyFireDamage; // Whether friendly fire counts or not
+
+	// Default constructor: clear everything
+	DAMAGE() {
+		owner = 0;		// handle of damage owner
+		source = 0;		// handle of damaging object
+		base = 0;		// base damage done
+		armor = 0;		// armor scale factor
+		shield = 0;		// shield scale factor
+		value = 0;		// damage value to apply
+		damageType = DAMAGE_TYPE_UNKNOWN;
+		m_SelfDamage = false;
+		m_FriendlyFireDamage = false;
+	}
+};
+
 #endif
 
 typedef char* Name;
@@ -249,6 +290,9 @@ typedef DWORD DPID;
 #define CTRL_EJECT (1<<6)
 #define CTRL_ABANDON (1<<7)
 #define CTRL_FIRE (1<<8)
+#define CTRL_NEXT (1<<9)
+#define CTRL_PREV (1<<10)
+#define CTRL_SPECIAL (1<<11)
 
 struct VehicleControls {
 	float braccel;
@@ -260,6 +304,9 @@ struct VehicleControls {
 	char eject;
 	char abandon;
 	char fire;
+	char next;
+	char prev;
+	char special;
 };
 
 // Structure for GetAllSpawnpoints
@@ -282,6 +329,14 @@ struct SpawnpointInfo
 	float	m_DistanceToClosestEnemy;
 };
 
+// Typedef for PostBulletInit callback. Is passed the shooter handle, 
+// the initial Matrix, initial Velocity, ordnance's team #, and also 
+// the ODF string of the ordnance involved.
+typedef void(DLLAPI *PostBulletInitCallback)(Handle shooterHandle, const Matrix &ordnanceMat, const Vector &ordnanceVel, int ordnanceTeam, float ordnanceLifespan, const char* pOrdnanceODF);
+
+// Typedef for PreDamag callback. Is passed the victim handle, and 
+// a reference damage struct that can be modified.
+typedef void (DLLAPI *PreDamageCallback)(const int curWorld, Handle h, const char* pContext, DAMAGE &dmg);
 
 // Typedef for the PreSnipe callback. Is passed the current world
 // (0=lockstep, 1 or 2 = visual world), two handles (shooter and
@@ -292,7 +347,7 @@ typedef PreSnipeReturnCodes (DLLAPI *PreSnipeCallback)(const int curWorld, Handl
 
 // Typedef for the PreOrdnanceHit callback. Is passed two handles
 // (shooter and victim), and also the ODF string of the ordnance
-// involved in the snipe. Returns nothing.
+// involved. Returns nothing.
 typedef void (DLLAPI *PreOrdnanceHitCallback)(Handle shooterHandle, Handle victimHandle, int ordnanceTeam, const char* pOrdnanceODF);
 
 
@@ -409,6 +464,8 @@ struct MisnExport2
 	PreOrdnanceHitCallback		m_pPreOrdnanceHitCallback;
 	PrePickupPowerupCallback	m_pPrePickupPowerupCallback;
 	PreSnipeCallback			m_pPreSnipeCallback;
+	PostBulletInitCallback		m_pPostBulletInitCallback;
+	PreDamageCallback			m_pPreDamageCallback;
 
 	// Constructor - sets all callbacks to unsubscribed
 	MisnExport2()
@@ -419,6 +476,8 @@ struct MisnExport2
 		m_pPreOrdnanceHitCallback = NULL;
 		m_pPrePickupPowerupCallback = NULL;
 		m_pPreSnipeCallback = NULL;
+		m_pPostBulletInitCallback = NULL;
+		m_pPreDamageCallback = NULL;
 	}
 };
 
@@ -642,6 +701,7 @@ DLLEXPORT void DLLAPI GetIn(Handle me, Handle him, int priority = 1);
 DLLEXPORT void DLLAPI Pickup(Handle me, Handle him, int priority = 1);
 
 // Dropoff(tug1, "return_path");
+// It actually orders CMD_DEPLOY, not CMD_DROPOFF, for constructors (See below)
 DLLEXPORT void DLLAPI Dropoff(Handle me, ConstName path, int priority = 1);
 
 // Build(rig, "sbsilo");
@@ -2375,6 +2435,28 @@ DLLEXPORT void DLLAPI PetWatchdogThread(void);
 DLLEXPORT TeamNum DLLAPI GetPerceivedTeam(Handle h);
 
 // Callback to set item in MisnExport2 - notes that the DLL would like
+// to set a PostBulletInit callback. This may by NULL if the DLL does not
+// want to subscribe to these callbacks. DLLs do NOT have to
+// unregister themselves before unloading; when the DLL is unloaded by
+// bzone.exe/bz2edit.exe, all callbacks are automatically cleared.
+//
+// Note that the shooters handle *should* be valid -- but just in case, 
+// the ordnance's team is also passed as a possible fallback for identification.
+//
+DLLEXPORT void DLLAPI SetPostBulletInitCallback(PostBulletInitCallback callback);
+
+// Callback to set item in MisnExport2 - notes that the DLL would like
+// to set a PreDamage callback. This may by NULL if the DLL does not
+// want to subscribe to these callbacks. DLLs do NOT have to
+// unregister themselves before unloading; when the DLL is unloaded by
+// bzone.exe/bz2edit.exe, all callbacks are automatically cleared.
+//
+// Note that the shooters handle *should* be valid -- but just in case, 
+// the ordnance's team is also passed as a possible fallback for identification.
+//
+DLLEXPORT void DLLAPI SetPreDamageCallback(PreDamageCallback callback);
+
+// Callback to set item in MisnExport2 - notes that the DLL would like
 // to set a PreSnipe callback. This may by NULL if the DLL does not
 // want to subscribe to these callbacks. DLLs do NOT have to
 // unregister themselves before unloading; when the DLL is unloaded by
@@ -2537,7 +2619,7 @@ DLLEXPORT long DLLAPI GetWeaponMask(Handle h);
 
 // Variants of Mine/Retreat/Dropoff that take a position, not a path
 // Note: Like Goto() variant, the Y component of the position passed
-// in is ignored.
+// in is ignored. Dropoff actually sets CMD_DEPLOY (for constructors)
 DLLEXPORT void DLLAPI Mine(Handle me, const Vector& pos, int priority = 1);
 DLLEXPORT void DLLAPI Dropoff(Handle me, const Vector& pos, int priority = 1);
 
@@ -2916,5 +2998,80 @@ DLLEXPORT void DLLAPI IFace_FadeOut(ConstName n);
 
 // Is Menu mode
 DLLEXPORT bool DLLAPI IFace_IsMenuMode(void);
+
+// Returns the current Health of a handle, even dead handles. Returns -2147483648 if the handle is invalid.
+DLLEXPORT long DLLAPI GetCurHealth2(Handle h);
+
+// Tells if a unit was Around. Similar to IsAround(), but returns true on Dead but not fully Removed objects.
+DLLEXPORT bool DLLAPI WasAround(Handle h);
+
+// NOTE: These GetProfile___ functions are NOT MP safe. Do not modify anything in the world 
+// based on results from these functions.
+
+// Returns the name string of the current player profile.
+DLLEXPORT const char* DLLAPI GetProfileName(void);
+
+// Returns the mission number of the current player profile.
+DLLEXPORT int DLLAPI GetProfileMission(void);
+
+// Returns the side of the current player profile.
+DLLEXPORT int DLLAPI GetProfileSide(void);
+
+// Returns if the Cheat is currently active.
+DLLEXPORT bool DLLAPI GetProfileCheatAmmo(void);
+DLLEXPORT bool DLLAPI GetProfileCheatArmor(void);
+DLLEXPORT bool DLLAPI GetProfileCheatScrap(void);
+DLLEXPORT bool DLLAPI GetProfileCheatSatellite(void);
+DLLEXPORT bool DLLAPI GetProfileCheatRadar(void);
+DLLEXPORT bool DLLAPI GetProfileCheatEdit(void);
+
+// Radar Visibility Methods
+// Visibility is if an object is currently visible on radar.
+// Seen is if the object has ever been seen on radar before.
+// Visibility methods set both Visible and Seen values.
+DLLEXPORT bool DLLAPI IsVisibleTo(Handle h, int team);
+DLLEXPORT void DLLAPI SetVisibleTo(Handle h, int team, bool visible);
+DLLEXPORT void DLLAPI ClearVisibility(Handle h);
+// Seen methods set only the Seen value.
+DLLEXPORT bool DLLAPI HasBeenSeenBy(Handle h, int team);
+DLLEXPORT void DLLAPI SetSeenTo(Handle h, int team, bool visible);
+DLLEXPORT void DLLAPI ClearSeen(Handle h);
+
+// Versions of Dropoff that actually set CMD_DROPOFF.
+DLLEXPORT void DLLAPI Dropoff2(Handle me, ConstName path, int priority = 1);
+DLLEXPORT void DLLAPI Dropoff2(Handle me, const Vector& pos, int priority = 1);
+
+// Get the magnitude of the currently active Quake
+DLLEXPORT float DLLAPI GetEarthQuakeMagnitude(void);
+
+// Sets the model name.
+DLLEXPORT void DLLAPI IFace_SetViewerModel(ConstName name, const char *model);
+
+// Sets the model animation
+DLLEXPORT void DLLAPI IFace_SetViewerAnim(ConstName name, const char *anim);
+
+// Sets the model ambient color
+DLLEXPORT void DLLAPI IFace_SetViewerAmbientColor(ConstName name, const float r, const float g, const float b);
+
+// Sets the model diffuse color
+DLLEXPORT void DLLAPI IFace_SetViewerDiffuseColor(ConstName name, const float r, const float g, const float b);
+
+// Sets the model diffuse color
+DLLEXPORT void DLLAPI IFace_SetViewerDiffuseDir(ConstName name, const float x, const float y, const float z);
+
+// Sets the model distance
+DLLEXPORT void DLLAPI IFace_SetViewerModelDistance(ConstName name, const float dist);
+
+// Sets the model  inclination
+DLLEXPORT void DLLAPI IFace_SetViewerModelInclination(ConstName name, const float angle);
+
+// Sets the model rotation speed
+DLLEXPORT void DLLAPI IFace_SetViewerModelRotation(ConstName name, const float rotation);
+
+// Sets the model rotation limits
+DLLEXPORT void DLLAPI IFace_SetViewerModelAngleLimits(ConstName name, const float min, const float max);
+
+// Gets which controls are currently set by the handle. Returns all blank controls (0's) if not a valid handle or not a craft.
+DLLEXPORT VehicleControls DLLAPI GetControls(Handle h);
 
 #endif
