@@ -21,8 +21,6 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH:
-        PrintConsoleMessage("Running BZCCGui");
-
         DisableThreadLibraryCalls(hModule);
         Hook::hDDLModule = hModule;
         if (auto h = CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)Hook::HookDirectX, nullptr, 0, nullptr))

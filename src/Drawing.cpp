@@ -28,18 +28,11 @@ HRESULT Drawing::hkPresent(IDXGISwapChain* pThis, UINT SyncInterval, UINT Flag)
 	if (GetAsyncKeyState(VK_INSERT) & 1)
 		bDisplay = !bDisplay;
 
-	if (GetAsyncKeyState(VK_END) & 1)
-	{
-		Hook::UnHookDirectX();
-		CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)FreeLibrary, Hook::hDDLModule, 0, nullptr);
-		return Hook::oPresent(pThis, SyncInterval, Flag);
-	}
-
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
-	RenderSpectatorView();
+	RenderAdvancedOverlay();
 
 	ImGui::EndFrame();
 	ImGui::Render();
@@ -71,7 +64,7 @@ void Drawing::InitImGui(IDXGISwapChain* pSwapChain)
 	bInit = TRUE;
 }
 
-void Drawing::RenderSpectatorView()
+void Drawing::RenderAdvancedOverlay()
 {
 	if (bDisplay)
 	{
@@ -89,16 +82,16 @@ void Drawing::RenderSpectatorView()
 		window_pos.y = (work_pos.y + (PAD * 4));
 		window_pos_pivot.x = 1.0f;
 		window_pos_pivot.y = 0.0f;
+		window_flags |= ImGuiWindowFlags_NoMove;
 
 		ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
-		window_flags |= ImGuiWindowFlags_NoMove;
 
 		ImGui::SetNextWindowSize(ImVec2(550, 0));
 		ImGui::SetNextWindowBgAlpha(0.35f);
 		ImGui::PushFont(NULL, 22);
 
-		if (ImGui::Begin("Spectator UI", &bDisplay, window_flags))
+		if (ImGui::Begin("Leaderboard", &bDisplay, window_flags))
 		{
 			static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg;
 
@@ -126,26 +119,6 @@ void Drawing::RenderSpectatorView()
 				ImGui::TableSetupColumn("Score");
 				ImGui::TableSetupColumn("K/D Ratio");
 				ImGui::TableHeadersRow();
-
-				//for (int row = 0; row < 1; row++)
-				//{
-				//	ImGui::TableNextRow();
-
-				//	ImGui::TableSetColumnIndex(0);
-				//	ImGui::TextUnformatted("AI_Unit");
-
-				//	ImGui::TableSetColumnIndex(1);
-				//	ImGui::TextUnformatted("0");
-
-				//	ImGui::TableSetColumnIndex(2);
-				//	ImGui::TextUnformatted("0");
-
-				//	ImGui::TableSetColumnIndex(3);
-				//	ImGui::TextUnformatted("0");
-
-				//	ImGui::TableSetColumnIndex(4);
-				//	ImGui::TextUnformatted("1.0");
-				//}
 
 				ImGui::EndTable();
 			}
